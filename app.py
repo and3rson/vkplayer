@@ -64,6 +64,8 @@ class App(object):
         # self.seek_bar.set_update_policy(Gtk.Range.UPDATE_DISCONTINUOUS)
         # print self.seek_bar.set_range(0, 1, 2)
         # self.seek_bar.set_step(0.001)
+        self.seek_bar.set_draw_value(False)
+        self.seek_bar.set_sensitive(False)
         self.seek_panel.pack_start(self.seek_bar, True, True, 0)
 
         self.seek_bar.connect('button-press-event', self._on_seek_start)
@@ -107,16 +109,24 @@ class App(object):
 
         self.playlist.connect('row-activated', self._on_row_activated)
 
-        self.playlist_store = Gtk.ListStore(str, str, str, str, int, int, int)
+        self.playlist_store = Gtk.ListStore(str, str, str, str, int, int, int, bool)
         self.playlist.set_model(self.playlist_store)
 
+        img = Gtk.Image()
+        img.set_from_stock(Gtk.STOCK_MEDIA_PLAY, 32)
+
+        col = Gtk.TreeViewColumn("", Gtk.CellRendererPixbuf(icon_name='media-playback-start'), visible=7)
+        col.set_expand(False)
+        self.playlist.append_column(col)
         col = Gtk.TreeViewColumn("Title", Gtk.CellRendererText(ellipsize=True), text=0)
         col.set_expand(True)
         self.playlist.append_column(col)
         col = Gtk.TreeViewColumn("Artist", Gtk.CellRendererText(ellipsize=True), text=1)
         col.set_expand(True)
         self.playlist.append_column(col)
-        self.playlist.append_column(Gtk.TreeViewColumn("Duration", Gtk.CellRendererText(), text=2))
+        col = Gtk.TreeViewColumn("Duration", Gtk.CellRendererText(), text=2)
+        col.set_expand(False)
+        self.playlist.append_column(col)
 
         # self.playlist_store.append(('a', 'b', 'c'))
         # self.playlist_store.append(('a', 'b', 'c'))
@@ -124,6 +134,10 @@ class App(object):
         # self.playlist.set_model(self.playlist_store)
 
         self.window.show_all()
+
+        seek_height = max(self.seek_bar.get_allocation().height, self.precache_progress.get_allocation().height)
+        self.seek_bar.set_size_request(-1, seek_height)
+        self.precache_progress.set_size_request(-1, seek_height)
 
         def on_close(win):
             if win == self.window:
@@ -143,7 +157,6 @@ class App(object):
         self.player.stop()
 
     def _on_token_ready(self, access_token):
-        print 'TOKEN READY:', access_token
         self.vk = VKApi(access_token)
 
     def _refresh(self):
@@ -152,12 +165,13 @@ class App(object):
 
     def _populate_playlist(self, songs):
         self.set_busy(False)
+        self.playlist_store.clear()
         for song in songs:
             song_duration = '%02d:%02d' % (
                 song['duration'] / 60,
                 song['duration'] % 60
             )
-            self.playlist_store.append((song['title'], song['artist'], song_duration, song['url'], song['duration'], song['owner_id'], song['aid']))
+            self.playlist_store.append((song['title'], song['artist'], song_duration, song['url'], song['duration'], song['owner_id'], song['aid'], False))
 
     def _on_refresh_clicked(self, *args):
         self.set_busy(True)
@@ -182,10 +196,14 @@ class App(object):
         self._play_song_at_iter(iter_)
 
     def _play_song_at_iter(self, iter_):
+        if self.current_song_iter is not None:
+            self.playlist.get_model().set_value(self.current_song_iter, 7, False)
+        self.playlist.get_model().set_value(iter_, 7, True)
+
         self.playlist.scroll_to_cell(self.playlist.get_model().get_path(iter_))
         self.playlist.get_selection().select_iter(iter_)
         self.current_song_iter = iter_
-        title, artist, duration_text, url, duration, owner_id, aid = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 7)]
+        title, artist, duration_text, url, duration, owner_id, aid, is_playing = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 8)]
         self.track_title.set_text(u'{} - {}'.format(title, artist))
         self.track_time.set_text(duration_text)
         self.song_length = duration
@@ -206,6 +224,13 @@ class App(object):
                 next_iter = model.iter_next(self.current_song_iter)
 
                 self._play_song_at_iter(next_iter)
+
+            self.track_time.set_text('%02d:%02d / %02d:%02d' % (
+                int(progress) / 60,
+                int(progress) % 60,
+                self.song_length / 60,
+                self.song_length % 60
+            ))
 
                 # self._on_row_activated(self.playlist, , None)
         Gdk.threads_add_timeout(0, 100, self._update)
@@ -237,7 +262,6 @@ class App(object):
         self.window.set_sensitive(not is_busy)
         if is_busy:
             self.spinner.start()
-            print 'start'
         else:
             self.spinner.stop()
 
