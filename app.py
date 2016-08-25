@@ -25,6 +25,7 @@ class App(object):
     def start(self):
         self.window = Gtk.Window()
         self.window.resize(600, 400)
+        self.window.set_title('VK audio player')
         # self.window.set_border_width(8)
 
         self.vbox = Gtk.VBox()
@@ -204,7 +205,9 @@ class App(object):
         self.playlist.get_selection().select_iter(iter_)
         self.current_song_iter = iter_
         title, artist, duration_text, url, duration, owner_id, aid, is_playing = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 8)]
-        self.track_title.set_text(u'{} - {}'.format(title, artist))
+        title_string = u'{} - {}'.format(artist, title)
+        self.track_title.set_text(title_string)
+        self.window.set_title(title_string)
         self.track_time.set_text(duration_text)
         self.song_length = duration
         self.player.play('{}_{}'.format(owner_id, aid), url)
