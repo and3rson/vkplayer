@@ -214,12 +214,12 @@ class App(object):
         self.playlist.get_selection().select_iter(iter_)
         self.current_song_iter = iter_
         title, artist, duration_text, url, duration, owner_id, aid, is_playing = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 8)]
-        title_string = u'{} - {}'.format(artist, title)
+        title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8'))
         self.track_title.set_text(title_string)
         self.window.set_title(title_string)
         self.track_time.set_text(duration_text)
         self.song_length = duration
-        self.player.play('{}_{}'.format(owner_id, aid), url)
+        self.player.play(u'{}_{}'.format(owner_id, aid), url)
         self.seek_bar.set_adjustment(Gtk.Adjustment(0, 0, duration, 0.1, 5, 0))
         self.seek_bar.set_value(0)
 
@@ -229,7 +229,7 @@ class App(object):
             if not self.is_seeking:
                 self.seek_bar.set_value(progress)
 
-            if self.song_length - progress < 1:
+            if self.player.is_finished:
                 model = self.playlist.get_model()
                 next_iter = model.iter_next(self.current_song_iter)
 

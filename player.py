@@ -48,20 +48,35 @@ class Player(Thread):
         super(Player, self).__init__()
 
         self.queue_thread = None
+        self._finished = False
+        self.player = None
+        self._reset()
+
+    def _reset(self):
+        if self.player:
+            self.player.pause()
+            self.player.delete()
+            del self.player
+        self._finished = False
         self.player = pyglet.media.Player()
+        self.player.on_eos = self._on_eos
 
     def run(self):
         pyglet.app.run()
+
+    def _on_eos(self, *args):
+        self._finished = True
+
+    @property
+    def is_finished(self):
+        return self._finished
 
     def play(self, audio_id=None, url=None):
         if url:
             self.on_download_started()
             if self.queue_thread:
                 self.queue_thread.stop()
-            self.player.pause()
-            self.player.delete()
-            del self.player
-            self.player = pyglet.media.Player()
+            self._reset()
             if not os.path.exists('./music/{}.mp3'.format(audio_id)):
                 self.queue_thread = Downloader(audio_id, url, self.on_progress_update, self._on_downloaded)
                 self.queue_thread.start()
