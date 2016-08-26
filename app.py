@@ -156,7 +156,7 @@ class App(object):
 
         Keybinder.init()
         Keybinder.bind('<Super>Return', self._on_random_clicked)
-        Keybinder.bind('<Super>S', lambda *args: self._on_play_clicked() if self.player.is_playing else self._on_pause_clicked())
+        Keybinder.bind('<Super>S', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
 
         Gtk.main()
         self.player.stop()
