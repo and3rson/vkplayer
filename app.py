@@ -1,10 +1,13 @@
-from gi.repository import Gtk, Gdk
-# import Gtk
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Keybinder', '3.0')
+from gi.repository import Gtk, Gdk, Keybinder
 from login import get_token
 from api import VKApi
 from player import Player
 from threading import Thread
 from random import randint
+from notifications import notify
 
 Gdk.threads_init()
 
@@ -151,6 +154,10 @@ class App(object):
 
         self._on_download_finished()
 
+        Keybinder.init()
+        Keybinder.bind('<Super>Return', self._on_random_clicked)
+        Keybinder.bind('<Super>S', lambda *args: self._on_play_clicked() if self.player.is_playing else self._on_pause_clicked())
+
         Gtk.main()
         self.player.stop()
 
@@ -215,6 +222,7 @@ class App(object):
         self.current_song_iter = iter_
         title, artist, duration_text, url, duration, owner_id, aid, is_playing = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 8)]
         title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8'))
+        notify('media-playback-start', 'Now playing', u'<b>{}</b> - {}'.format(artist, title), timeout=5000)
         self.track_title.set_text(title_string)
         self.window.set_title(title_string)
         self.track_time.set_text(duration_text)

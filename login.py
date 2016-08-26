@@ -1,6 +1,6 @@
+from gi.repository import Gtk, WebKit
 import os
 from urlparse import urlparse, parse_qs
-from gi.repository import Gtk, WebKit
 
 
 def _start_login_process(window, callback):

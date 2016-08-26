@@ -123,3 +123,7 @@ class Player(Thread):
 
     def on_download_finished(self):
         pass
+
+    @property
+    def is_playing(self):
+        return self.player.playing
