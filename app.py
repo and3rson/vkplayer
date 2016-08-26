@@ -26,7 +26,6 @@ class App(object):
         self.window = Gtk.Window()
         self.window.resize(600, 400)
         self.window.set_title('VK audio player')
-        # self.window.set_border_width(8)
 
         self.vbox = Gtk.VBox()
         self.window.add(self.vbox)
@@ -62,9 +61,7 @@ class App(object):
         self.seek_labels.pack_start(self.track_time, True, True, 0)
 
         self.seek_bar = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=Gtk.Adjustment(0, 0, 1, 1, 0, 0))
-        # self.seek_bar.set_update_policy(Gtk.Range.UPDATE_DISCONTINUOUS)
-        # print self.seek_bar.set_range(0, 1, 2)
-        # self.seek_bar.set_step(0.001)
+
         self.seek_bar.set_draw_value(False)
         self.seek_bar.set_sensitive(False)
         self.seek_panel.pack_start(self.seek_bar, True, True, 0)
@@ -157,12 +154,24 @@ class App(object):
         Gtk.main()
         self.player.stop()
 
+    def _start_login_force(self):
+        get_token(self.window, self._on_token_ready, True)
+
     def _on_token_ready(self, access_token):
+        def cb(data):
+            if 'error' in data.keys():
+                return self._start_login_force()
+
         self.vk = VKApi(access_token)
+        self.vk.users_get(lambda data: Gdk.threads_add_idle(0, lambda: cb(data)))
 
     def _refresh(self):
-        songs = self.vk.audio_get()['response']
-        Gdk.threads_add_idle(0, lambda: self._populate_playlist(songs))
+        def cb(data):
+            if 'error' in data.keys():
+                return self._start_login_force()
+            Gdk.threads_add_idle(0, lambda: self._populate_playlist(data['response']))
+
+        self.vk.audio_get(cb)
 
     def _populate_playlist(self, songs):
         self.set_busy(False)
@@ -217,8 +226,6 @@ class App(object):
     def _update(self):
         if self.current_song_iter is not None:
             progress = self.player.get_play_progress()
-            # self.seek_bar.set_fraction((progress / self.song_length) if self.song_length > 0 else 0)
-            # self.seek_bar.set_adjustment()
             if not self.is_seeking:
                 self.seek_bar.set_value(progress)
 
@@ -234,8 +241,6 @@ class App(object):
                 self.song_length / 60,
                 self.song_length % 60
             ))
-
-                # self._on_row_activated(self.playlist, , None)
         Gdk.threads_add_timeout(0, 100, self._update)
 
     def _on_seek_start(self, *args):
@@ -273,12 +278,9 @@ class App(object):
         Thread(target=self._search).start()
 
     def _search(self):
-        songs = self.vk.audio_search(q=self.query.get_text())['response'][1:]
-        Gdk.threads_add_idle(0, lambda: self._populate_playlist(songs))
+        def cb(data):
+            if 'error' in data:
+                return self._start_login_force()
+            Gdk.threads_add_idle(0, lambda: self._populate_playlist(data['response'][1:]))
 
-    # @classmethod
-    # def login_finished(access_token):
-        # print 'Token:', access_token
-
-        # def _login_finished(self, access_token):
-        # start_login_process(login_finished)
+        self.vk.audio_search(cb, q=self.query.get_text())

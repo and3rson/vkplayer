@@ -1,3 +1,4 @@
+import os
 from urlparse import urlparse, parse_qs
 from gi.repository import Gtk, WebKit
 
@@ -27,10 +28,8 @@ def _start_login_process(window, callback):
     wk.connect('load-finished', login_succeeded)
 
 
-def get_token(window, callback):
-    try:
-        f = open('/tmp/vk_access_token', 'r')
-    except:
+def get_token(window, callback, force=False):
+    if force or not os.path.exists('/tmp/vk_access_token'):
         def _callback(access_token):
             f = open('/tmp/vk_access_token', 'w')
             f.write(access_token)
@@ -38,6 +37,7 @@ def get_token(window, callback):
             callback(access_token)
         _start_login_process(window, _callback)
     else:
+        f = open('/tmp/vk_access_token', 'r')
         access_token = f.read().strip()
         f.close()
         callback(access_token)

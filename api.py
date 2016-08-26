@@ -1,31 +1,29 @@
 from urllib import urlencode
 import urllib2
 import json
+from threading import Thread
 
 
 class VKApi(object):
     BASE_URL = 'https://api.vk.com/method/{method}?{query}'
 
-    def _request(self, method, **kwargs):
+    def _request(self, method, cb, **kwargs):
         response = urllib2.urlopen(VKApi.BASE_URL.format(
             method=method,
             query=urlencode(kwargs)
         ))
-        return json.loads(response.read())
+        cb(json.loads(response.read()))
 
     def __init__(self, access_token):
         self.access_token = access_token
 
-    def api_method(fn):
-        def wrapper(self, **kwargs):
+    def api_method(method):
+        def wrapper(self, cb, **kwargs):
             kwargs.update(dict(access_token=self.access_token))
-            return self._request(fn.__name__.replace('_', '.'), **kwargs)
+
+            Thread(target=self._request, args=(method, cb), kwargs=kwargs).start()
         return wrapper
 
-    @api_method
-    def audio_get(self, **kwargs):
-        pass
-
-    @api_method
-    def audio_search(self, **kwargs):
-        pass
+    audio_get = api_method('audio.get')
+    audio_search = api_method('audio.search')
+    users_get = api_method('users.get')
