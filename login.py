@@ -1,6 +1,6 @@
 from gi.repository import Gtk, WebKit
-import os
 from urlparse import urlparse, parse_qs
+from settings import Settings
 
 
 def _start_login_process(window, callback):
@@ -29,15 +29,15 @@ def _start_login_process(window, callback):
 
 
 def get_token(window, callback, force=False):
-    if force or not os.path.exists('/tmp/vk_access_token'):
+    settings = Settings()
+    settings.read()
+
+    if force or not settings.cp.has_option('vk', 'access_token'):
         def _callback(access_token):
-            f = open('/tmp/vk_access_token', 'w')
-            f.write(access_token)
-            f.close()
+            settings.read()
+            settings.cp.set('vk', 'access_token', access_token)
+            settings.write()
             callback(access_token)
         _start_login_process(window, _callback)
     else:
-        f = open('/tmp/vk_access_token', 'r')
-        access_token = f.read().strip()
-        f.close()
-        callback(access_token)
+        callback(settings.cp.get('vk', 'access_token'))

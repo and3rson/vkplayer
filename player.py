@@ -50,6 +50,7 @@ class Player(Thread):
         self.queue_thread = None
         self._finished = False
         self.player = None
+        self.volume = 1
         self._reset()
 
     def _reset(self):
@@ -66,6 +67,11 @@ class Player(Thread):
 
     def _on_eos(self, *args):
         self._finished = True
+
+    def set_volume(self, value):
+        if self.player:
+            self.volume = value
+            self.player.volume = value
 
     @property
     def is_finished(self):
@@ -84,6 +90,7 @@ class Player(Thread):
                 self._on_downloaded(audio_id, None, False)
         else:
             self.player.play()
+            self.player.volume = self.volume
 
     def _on_downloaded(self, audio_id, data, save=True):
         if not os.path.exists('./music'):
@@ -100,6 +107,7 @@ class Player(Thread):
 
         self.player.queue(source)
         self.player.play()
+        self.player.volume = self.volume
 
         self.on_download_finished()
 

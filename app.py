@@ -2,6 +2,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Keybinder', '3.0')
 from gi.repository import Gtk, Gdk, Gio, GdkPixbuf, Keybinder
+from settings import Settings
 from login import get_token
 from api import VKApi, ITunesApi
 from player import Player
@@ -15,6 +16,7 @@ Gdk.threads_init()
 
 class App(object):
     def __init__(self):
+        self.settings = Settings()
         self.vk = None
         self.itunes = ITunesApi()
         self.player = Player()
@@ -85,6 +87,12 @@ class App(object):
         self.precache_progress = Gtk.ProgressBar()
         self.seek_panel.pack_start(self.precache_progress, True, True, 0)
 
+        self.volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=Gtk.Adjustment(1, 0, 1, 0.05, 0.05, 0.05), valign=Gtk.Align.CENTER)
+        self.volume_scale.connect('value_changed', lambda *args: self.player.set_volume(self.volume_scale.get_value()))
+        self.volume_scale.set_draw_value(False)
+        self.volume_scale.set_size_request(64, -1)
+        self.controls.pack_start(self.volume_scale, False, True, 0)
+
         # self.vbox.pack_start(Gtk.VSeparator(), False, True, 0)
 
         #
@@ -138,12 +146,6 @@ class App(object):
         col = Gtk.TreeViewColumn("Duration", Gtk.CellRendererText(), text=2)
         col.set_expand(False)
         self.playlist.append_column(col)
-
-
-        # self.playlist_store.append(('a', 'b', 'c'))
-        # self.playlist_store.append(('a', 'b', 'c'))
-        # self.playlist_store.append(('a', 'b', 'c'))
-        # self.playlist.set_model(self.playlist_store)
 
         self.vbox.show_all()
         self.window.maximize()
@@ -315,11 +317,9 @@ class App(object):
                 cancellable=None
             )
             Gdk.threads_add_idle(0, lambda: self.cover.set_from_pixbuf(pixbuf))
-            # Thread(target=fetch).start()
 
     def _on_seek_start(self, *args):
         self.is_seeking = True
-        # self.seek_bar
 
     def _on_seek_end(self, *args):
         self.player.pause()
