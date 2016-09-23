@@ -39,15 +39,17 @@ class App(object):
         self.controls.set_border_width(8)
         self.vbox.pack_start(self.controls, False, True, 0)
 
-        self.play = Gtk.Button('Play')
+        self.play = Gtk.Button('', image=Gtk.Image(stock=Gtk.STOCK_MEDIA_PLAY))
         self.play.connect('clicked', self._on_play_clicked)
         self.controls.pack_start(self.play, False, True, 0)
 
-        self.pause = Gtk.Button('Pause')
+        self.pause = Gtk.Button('', image=Gtk.Image(stock=Gtk.STOCK_MEDIA_PAUSE))
         self.pause.connect('clicked', self._on_pause_clicked)
         self.controls.pack_start(self.pause, False, True, 0)
 
-        self.random = Gtk.Button('Random')
+        img = Gtk.Image()
+        img.set_from_pixbuf(Gtk.IconTheme.get_default().load_icon('media-playlist-shuffle', 20, 0))
+        self.random = Gtk.Button('', image=img)
         self.random.connect('clicked', self._on_random_clicked)
         self.controls.pack_start(self.random, False, True, 0)
 
@@ -87,6 +89,25 @@ class App(object):
 
         #
 
+        self.search_panel = Gtk.HBox(spacing=8)
+        self.search_panel.set_border_width(8)
+        self.vbox.pack_start(self.search_panel, False, True, 0)
+
+        self.refresh = Gtk.Button('My audio')
+        self.refresh.connect('clicked', self._on_refresh_clicked)
+        self.search_panel.pack_start(self.refresh, False, True, 0)
+
+        self.search_panel.pack_start(Gtk.HSeparator(), False, True, 0)
+
+        self.query = Gtk.Entry(placeholder_text='Search music')
+        self.search_panel.pack_start(self.query, True, True, 0)
+
+        self.search = Gtk.Button('Search')
+        self.search.connect('clicked', self._on_search_clicked)
+        self.search_panel.pack_start(self.search, False, True, 0)
+
+        #
+
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.ALWAYS)
         self.vbox.pack_start(self.scroll, True, True, 0)
@@ -118,24 +139,6 @@ class App(object):
         col.set_expand(False)
         self.playlist.append_column(col)
 
-        #
-
-        self.search_panel = Gtk.HBox(spacing=8)
-        self.search_panel.set_border_width(8)
-        self.vbox.pack_start(self.search_panel, False, True, 0)
-
-        self.refresh = Gtk.Button('My audio')
-        self.refresh.connect('clicked', self._on_refresh_clicked)
-        self.search_panel.pack_start(self.refresh, False, True, 0)
-
-        self.search_panel.pack_start(Gtk.HSeparator(), False, True, 0)
-
-        self.query = Gtk.Entry(placeholder_text='Search music')
-        self.search_panel.pack_start(self.query, True, True, 0)
-
-        self.search = Gtk.Button('Search')
-        self.search.connect('clicked', self._on_search_clicked)
-        self.search_panel.pack_start(self.search, False, True, 0)
 
         # self.playlist_store.append(('a', 'b', 'c'))
         # self.playlist_store.append(('a', 'b', 'c'))
@@ -143,6 +146,7 @@ class App(object):
         # self.playlist.set_model(self.playlist_store)
 
         self.vbox.show_all()
+        self.window.maximize()
         self.window.hide()
 
         seek_height = max(self.seek_bar.get_allocation().height, self.precache_progress.get_allocation().height)
