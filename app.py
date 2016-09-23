@@ -1,13 +1,14 @@
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Keybinder', '3.0')
-from gi.repository import Gtk, Gdk, Keybinder
+from gi.repository import Gtk, Gdk, Gio, GdkPixbuf, Keybinder
 from login import get_token
-from api import VKApi
+from api import VKApi, ITunesApi
 from player import Player
 from threading import Thread
 from random import randint
 from notifications import notify
+from re import sub
 
 Gdk.threads_init()
 
@@ -15,6 +16,7 @@ Gdk.threads_init()
 class App(object):
     def __init__(self):
         self.vk = None
+        self.itunes = ITunesApi()
         self.player = Player()
         self.player.start()
         self.song_length = 0
@@ -51,6 +53,12 @@ class App(object):
 
         self.controls.pack_start(Gtk.HSeparator(), False, True, 0)
 
+        self.cover = Gtk.Image()
+        # self.cover.set_from_file('icons/play.png')
+        # self.cover.connect('clicked', self._on_random_clicked)
+        self.cover.set_size_request(42, 42)
+        self.controls.pack_start(self.cover, False, True, 0)
+
         self.seek_panel = Gtk.VBox()
         self.controls.pack_start(self.seek_panel, True, True, 0)
 
@@ -76,25 +84,6 @@ class App(object):
         self.seek_panel.pack_start(self.precache_progress, True, True, 0)
 
         # self.vbox.pack_start(Gtk.VSeparator(), False, True, 0)
-
-        #
-
-        self.search_panel = Gtk.HBox(spacing=8)
-        self.search_panel.set_border_width(8)
-        self.vbox.pack_start(self.search_panel, False, True, 0)
-
-        self.refresh = Gtk.Button('My audio')
-        self.refresh.connect('clicked', self._on_refresh_clicked)
-        self.search_panel.pack_start(self.refresh, False, True, 0)
-
-        self.search_panel.pack_start(Gtk.HSeparator(), False, True, 0)
-
-        self.query = Gtk.Entry(placeholder_text='Search music')
-        self.search_panel.pack_start(self.query, True, True, 0)
-
-        self.search = Gtk.Button('Search')
-        self.search.connect('clicked', self._on_search_clicked)
-        self.search_panel.pack_start(self.search, False, True, 0)
 
         #
 
@@ -129,22 +118,38 @@ class App(object):
         col.set_expand(False)
         self.playlist.append_column(col)
 
+        #
+
+        self.search_panel = Gtk.HBox(spacing=8)
+        self.search_panel.set_border_width(8)
+        self.vbox.pack_start(self.search_panel, False, True, 0)
+
+        self.refresh = Gtk.Button('My audio')
+        self.refresh.connect('clicked', self._on_refresh_clicked)
+        self.search_panel.pack_start(self.refresh, False, True, 0)
+
+        self.search_panel.pack_start(Gtk.HSeparator(), False, True, 0)
+
+        self.query = Gtk.Entry(placeholder_text='Search music')
+        self.search_panel.pack_start(self.query, True, True, 0)
+
+        self.search = Gtk.Button('Search')
+        self.search.connect('clicked', self._on_search_clicked)
+        self.search_panel.pack_start(self.search, False, True, 0)
+
         # self.playlist_store.append(('a', 'b', 'c'))
         # self.playlist_store.append(('a', 'b', 'c'))
         # self.playlist_store.append(('a', 'b', 'c'))
         # self.playlist.set_model(self.playlist_store)
 
-        self.window.show_all()
+        self.vbox.show_all()
+        self.window.hide()
 
         seek_height = max(self.seek_bar.get_allocation().height, self.precache_progress.get_allocation().height)
         self.seek_bar.set_size_request(-1, seek_height)
         self.precache_progress.set_size_request(-1, seek_height)
 
-        def on_close(win):
-            if win == self.window:
-                Gtk.main_quit()
-
-        self.window.connect('destroy', on_close)
+        self.window.connect('delete-event', self._show_or_hide)
 
         get_token(self.window, self._on_token_ready)
 
@@ -158,8 +163,44 @@ class App(object):
         Keybinder.bind('<Super>Return', self._on_random_clicked)
         Keybinder.bind('<Super>S', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
 
+        self.status_icon = Gtk.StatusIcon()
+        self.status_icon.set_from_file('icons/play.png')
+        self.status_icon.connect('popup-menu', self._on_popup_menu)
+        self.status_icon.connect('activate', self._show_or_hide)
+
         Gtk.main()
         self.player.stop()
+
+    def _on_popup_menu(self, icon, button, time):
+        menu = Gtk.Menu()
+
+        show = Gtk.ImageMenuItem()
+        img = Gtk.Image()
+        img.set_from_stock(Gtk.STOCK_ADD, Gtk.IconSize.MENU)
+        show.set_image(img)
+        show.set_label("Show/hide player")
+        quit = Gtk.ImageMenuItem()
+        img = Gtk.Image()
+        img.set_from_stock(Gtk.STOCK_QUIT, Gtk.IconSize.MENU)
+        quit.set_image(img)
+        quit.set_label("Quit")
+
+        show.connect("activate", self._show_or_hide)
+        quit.connect("activate", lambda *args: Gtk.main_quit())
+
+        menu.append(show)
+        menu.append(quit)
+
+        menu.show_all()
+
+        menu.popup(None, None, None, self.status_icon, button, time)
+
+    def _show_or_hide(self, *args):
+        if self.window.get_property('visible'):
+            self.window.hide()
+        else:
+            self.window.show()
+        return True
 
     def _start_login_force(self):
         get_token(self.window, self._on_token_ready, True)
@@ -168,6 +209,8 @@ class App(object):
         def cb(data):
             if 'error' in data.keys():
                 return self._start_login_force()
+            else:
+                self._on_refresh_clicked()
 
         self.vk = VKApi(access_token)
         self.vk.users_get(lambda data: Gdk.threads_add_idle(0, lambda: cb(data)))
@@ -222,7 +265,7 @@ class App(object):
         self.current_song_iter = iter_
         title, artist, duration_text, url, duration, owner_id, aid, is_playing = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 8)]
         title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8'))
-        notify('media-playback-start', 'Now playing', u'<b>{}</b> - {}'.format(artist, title), timeout=5000)
+        notify('media-playback-start', 'Now playing', u'<b>{}</b> - {}'.format(artist.decode('utf-8'), title.decode('utf-8')), timeout=5000)
         self.track_title.set_text(title_string)
         self.window.set_title(title_string)
         self.track_time.set_text(duration_text)
@@ -230,6 +273,10 @@ class App(object):
         self.player.play(u'{}_{}'.format(owner_id, aid), url)
         self.seek_bar.set_adjustment(Gtk.Adjustment(0, 0, duration, 0.1, 5, 0))
         self.seek_bar.set_value(0)
+
+        title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
+        # print 'Fetching album art for', title_string_cleaned
+        Thread(target=lambda: self.itunes.search(self._on_song_info_loaded, term=title_string_cleaned)).start()
 
     def _update(self):
         if self.current_song_iter is not None:
@@ -250,6 +297,21 @@ class App(object):
                 self.song_length % 60
             ))
         Gdk.threads_add_timeout(0, 100, self._update)
+
+    def _on_song_info_loaded(self, data):
+        if data['resultCount'] > 0:
+            result = data['results'][0]
+            artworkUrl = result['artworkUrl100']
+
+            file = Gio.File.new_for_uri(artworkUrl)
+            pixbuf = GdkPixbuf.Pixbuf.new_from_stream_at_scale(
+                file.read(cancellable=None),
+                width=42, height=42,
+                preserve_aspect_ratio=False,
+                cancellable=None
+            )
+            Gdk.threads_add_idle(0, lambda: self.cover.set_from_pixbuf(pixbuf))
+            # Thread(target=fetch).start()
 
     def _on_seek_start(self, *args):
         self.is_seeking = True
