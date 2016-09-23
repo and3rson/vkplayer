@@ -25,6 +25,11 @@ class App(object):
         self.current_song_iter = None
         self.is_seeking = False
 
+        if not self.settings.cp.has_option('general', 'volume'):
+            self.settings.cp.set('general', 'volume', '1.0')
+            self.settings.write()
+        self.last_volume = self.settings.cp.getfloat('general', 'volume')
+
         self.player.on_download_started = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_started(*args))
         self.player.on_progress_update = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
         self.player.on_download_finished = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
@@ -91,6 +96,7 @@ class App(object):
         self.volume_scale.connect('value_changed', lambda *args: self.player.set_volume(self.volume_scale.get_value()))
         self.volume_scale.set_draw_value(False)
         self.volume_scale.set_size_request(64, -1)
+        self.volume_scale.set_value(self.last_volume)
         self.controls.pack_start(self.volume_scale, False, True, 0)
 
         # self.vbox.pack_start(Gtk.VSeparator(), False, True, 0)
@@ -302,6 +308,11 @@ class App(object):
                 self.song_length / 60,
                 self.song_length % 60
             ))
+        if self.last_volume != self.volume_scale.get_value():
+            self.last_volume = self.volume_scale.get_value()
+            self.settings.read()
+            self.settings.cp.set('general', 'volume', self.last_volume)
+            self.settings.write()
         Gdk.threads_add_timeout(0, 100, self._update)
 
     def _on_song_info_loaded(self, data):
