@@ -2,6 +2,7 @@ import os
 import pyglet
 from threading import Thread
 import urllib2
+from settings import Settings
 
 
 class Downloader(Thread):
@@ -83,7 +84,7 @@ class Player(Thread):
             if self.queue_thread:
                 self.queue_thread.stop()
             self._reset()
-            if not os.path.exists('./music/{}.mp3'.format(audio_id)):
+            if not os.path.exists(os.path.join(Settings.get_cache_dir(), '{}.mp3'.format(audio_id))):
                 self.queue_thread = Downloader(audio_id, url, self.on_progress_update, self._on_downloaded)
                 self.queue_thread.start()
             else:
@@ -93,10 +94,7 @@ class Player(Thread):
             self.player.volume = self.volume
 
     def _on_downloaded(self, audio_id, data, save=True):
-        if not os.path.exists('./music'):
-            os.mkdir('./music')
-
-        fname = './music/{}.mp3'.format(audio_id)
+        fname = os.path.join(Settings.get_cache_dir(), '{}.mp3'.format(audio_id))
 
         if save:
             file = open(fname, 'w')

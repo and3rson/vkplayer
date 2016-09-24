@@ -25,10 +25,11 @@ class App(object):
         self.current_song_iter = None
         self.is_seeking = False
 
+        self.settings.acquire()
         if not self.settings.cp.has_option('general', 'volume'):
             self.settings.cp.set('general', 'volume', '1.0')
-            self.settings.write()
         self.last_volume = self.settings.cp.getfloat('general', 'volume')
+        self.settings.release()
 
         self.player.on_download_started = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_started(*args))
         self.player.on_progress_update = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
@@ -310,9 +311,9 @@ class App(object):
             ))
         if self.last_volume != self.volume_scale.get_value():
             self.last_volume = self.volume_scale.get_value()
-            self.settings.read()
+            self.settings.acquire()
             self.settings.cp.set('general', 'volume', self.last_volume)
-            self.settings.write()
+            self.settings.release()
         Gdk.threads_add_timeout(0, 100, self._update)
 
     def _on_song_info_loaded(self, data):

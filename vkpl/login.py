@@ -30,13 +30,15 @@ def _start_login_process(window, callback):
 
 def get_token(window, callback, force=False):
     settings = Settings()
-    settings.read()
+    settings.acquire()
+    has_token = settings.cp.has_option('vk', 'access_token')
+    settings.release()
 
-    if force or not settings.cp.has_option('vk', 'access_token'):
+    if force or not has_token:
         def _callback(access_token):
-            settings.read()
+            settings.acquire()
             settings.cp.set('vk', 'access_token', access_token)
-            settings.write()
+            settings.release()
             callback(access_token)
         _start_login_process(window, _callback)
     else:
