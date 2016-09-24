@@ -10,6 +10,10 @@ from threading import Thread
 from random import randint
 from notifications import notify
 from re import sub
+import os
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 Gdk.threads_init()
 
@@ -177,7 +181,7 @@ class App(object):
         Keybinder.bind('<Super>S', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
 
         self.status_icon = Gtk.StatusIcon()
-        self.status_icon.set_from_file('icons/play.png')
+        self.status_icon.set_from_file(os.path.join(DIR, 'icons/play.png'))
         self.status_icon.connect('popup-menu', self._on_popup_menu)
         self.status_icon.connect('activate', self._show_or_hide)
 
