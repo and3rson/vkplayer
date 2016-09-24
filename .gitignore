@@ -91,3 +91,9 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# makepkg build stuff
+package/pkg
+package/src
+package/vkplayer
+package/*.tar.xz
