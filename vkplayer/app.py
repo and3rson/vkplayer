@@ -5,6 +5,7 @@ from gi.repository import Gtk, Gdk, Gio, GdkPixbuf, Keybinder
 from settings import Settings
 from login import get_token
 from api import VKApi, ITunesApi
+from messaging import MessagingBus
 from player import Player
 from threading import Thread
 from random import randint
@@ -24,9 +25,11 @@ class App(object):
         self.vk = None
         self.itunes = ITunesApi()
         self.player = Player()
+        self.ipc = MessagingBus(self)
         self.player.start()
         self.song_length = 0
         self.current_song_iter = None
+        self.current_title_string = 'Idle'
         self.is_seeking = False
 
         self.settings.acquire()
@@ -35,54 +38,104 @@ class App(object):
         self.last_volume = self.settings.cp.getfloat('general', 'volume')
         self.settings.release()
 
+        self.is_downloading = False
         self.player.on_download_started = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_started(*args))
         self.player.on_progress_update = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
         self.player.on_download_finished = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
 
     def start(self):
+        self.ipc.start()
+        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
+
         self.window = Gtk.Window()
         self.window.resize(600, 400)
         self.window.set_title('VK audio player')
 
+        self.accels = Gtk.AccelGroup()
+
         self.vbox = Gtk.VBox()
         self.window.add(self.vbox)
 
+        # self.window.modify_bg(Gtk.StateFlags.NORMAL, Gdk.color_parse('#CCCCCC'))
+
+        self.header = Gtk.HBox()
+        # self.header.override_background_color(Gtk.StateFlags.NORMAL | Gtk.StateFlags.ACTIVE | Gtk.StateFlags.INSENSITIVE, color)
+        self.header_left = Gtk.HBox()
+        self.header_right = Gtk.VBox()
+        self.header.pack_start(self.header_left, False, True, 0)
+        self.header.pack_start(self.header_right, True, True, 0)
+        self.vbox.pack_start(self.header, False, True, 0)
+
         self.controls = Gtk.HBox(spacing=8)
         self.controls.set_border_width(8)
-        self.vbox.pack_start(self.controls, False, True, 0)
+        self.header_right.pack_start(self.controls, False, True, 0)
 
-        self.play = Gtk.Button('', image=Gtk.Image(stock=Gtk.STOCK_MEDIA_PLAY))
+        img = Gtk.Image()
+        img.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
+            os.path.join(DIR, 'icons/icon-play-128.png'),
+            width=48, height=48,
+            preserve_aspect_ratio=False
+        ))
+
+        self.play = Gtk.Button('', image=img)
+        self.play.set_always_show_image(True)
+        self.play.set_relief(Gtk.ReliefStyle.NONE)
         self.play.connect('clicked', self._on_play_clicked)
         self.controls.pack_start(self.play, False, True, 0)
 
-        self.pause = Gtk.Button('', image=Gtk.Image(stock=Gtk.STOCK_MEDIA_PAUSE))
+        img = Gtk.Image()
+        img.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
+            os.path.join(DIR, 'icons/icon-pause-128.png'),
+            width=48, height=48,
+            preserve_aspect_ratio=False
+        ))
+
+        self.pause = Gtk.Button('', image=img)
+        self.pause.set_always_show_image(True)
+        self.pause.set_relief(Gtk.ReliefStyle.NONE)
         self.pause.connect('clicked', self._on_pause_clicked)
         self.controls.pack_start(self.pause, False, True, 0)
 
         img = Gtk.Image()
-        img.set_from_pixbuf(Gtk.IconTheme.get_default().load_icon('media-playlist-shuffle', 20, 0))
+        img.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
+            os.path.join(DIR, 'icons/icon-shuffle-128.png'),
+            width=48, height=48,
+            preserve_aspect_ratio=False
+        ))
+
         self.random = Gtk.Button('', image=img)
+        self.random.set_always_show_image(True)
+        self.random.set_relief(Gtk.ReliefStyle.NONE)
         self.random.connect('clicked', self._on_random_clicked)
         self.controls.pack_start(self.random, False, True, 0)
 
         self.controls.pack_start(Gtk.HSeparator(), False, True, 0)
 
         self.cover = Gtk.Image()
-        # self.cover.set_from_file('icons/play.png')
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+            os.path.join(DIR, 'icons/cover512.jpg'),
+            width=144, height=144,
+            preserve_aspect_ratio=False
+        )
+        self.cover.set_from_pixbuf(pixbuf)
         # self.cover.connect('clicked', self._on_random_clicked)
-        self.cover.set_size_request(42, 42)
-        self.controls.pack_start(self.cover, False, True, 0)
+        self.cover.set_size_request(144, 144)
+        self.header_left.pack_start(self.cover, False, True, 0)
 
         self.seek_panel = Gtk.VBox()
         self.controls.pack_start(self.seek_panel, True, True, 0)
 
         self.seek_labels = Gtk.HBox()
-        self.seek_panel.pack_start(self.seek_labels, True, True, 0)
+        self.seek_panel.pack_start(self.seek_labels, True, True, 10)
 
-        self.track_title = Gtk.Label('Foo - Bar', halign=Gtk.Align.START, valign=Gtk.Align.END)
+        self.track_title = Gtk.Label('', halign=Gtk.Align.START, valign=Gtk.Align.END)
+        self.track_title.set_use_markup(True)
+        self.track_title.set_markup('<span font="Roboto 24" weight="300">Idle</span>')
         self.seek_labels.pack_start(self.track_title, True, True, 0)
 
         self.track_time = Gtk.Label('05:00', halign=Gtk.Align.END, valign=Gtk.Align.END)
+        self.track_time.set_use_markup(True)
+        self.track_time.set_markup('<span font="Roboto 24" weight="100">05:00</span>')
         self.seek_labels.pack_start(self.track_time, True, True, 0)
 
         self.seek_bar = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=Gtk.Adjustment(0, 0, 1, 1, 0, 0))
@@ -97,10 +150,11 @@ class App(object):
         self.precache_progress = Gtk.ProgressBar()
         self.seek_panel.pack_start(self.precache_progress, True, True, 0)
 
-        self.volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=Gtk.Adjustment(1, 0, 1, 0.05, 0.05, 0.05), valign=Gtk.Align.CENTER)
+        self.volume_scale = Gtk.Scale(orientation=Gtk.Orientation.VERTICAL, adjustment=Gtk.Adjustment(1, 0, 1, 0.05, 0.05, 0.05), valign=Gtk.Align.CENTER)
+        self.volume_scale.set_inverted(True)
         self.volume_scale.connect('value_changed', lambda *args: self.player.set_volume(self.volume_scale.get_value()))
         self.volume_scale.set_draw_value(False)
-        self.volume_scale.set_size_request(64, -1)
+        self.volume_scale.set_size_request(-1, 64)
         self.volume_scale.set_value(self.last_volume)
         self.controls.pack_start(self.volume_scale, False, True, 0)
 
@@ -110,15 +164,22 @@ class App(object):
 
         self.search_panel = Gtk.HBox(spacing=8)
         self.search_panel.set_border_width(8)
-        self.vbox.pack_start(self.search_panel, False, True, 0)
+        self.header_right.pack_start(self.search_panel, False, True, 0)
 
         self.refresh = Gtk.Button('My audio')
         self.refresh.connect('clicked', self._on_refresh_clicked)
+        accelerator = '<Ctrl>m'
+        key, mod = Gtk.accelerator_parse(accelerator)
+        self.refresh.add_accelerator('activate', self.accels, key, mod, Gtk.AccelFlags.VISIBLE)
         self.search_panel.pack_start(self.refresh, False, True, 0)
 
         self.search_panel.pack_start(Gtk.HSeparator(), False, True, 0)
 
         self.query = Gtk.Entry(placeholder_text='Search music')
+        self.query.connect('activate', self._on_search_clicked)
+        accelerator = '<Ctrl>f'
+        key, mod = Gtk.accelerator_parse(accelerator)
+        self.query.add_accelerator('grab-focus', self.accels, key, mod, Gtk.AccelFlags.VISIBLE)
         self.search_panel.pack_start(self.query, True, True, 0)
 
         self.search = Gtk.Button('Search')
@@ -148,19 +209,25 @@ class App(object):
         col = Gtk.TreeViewColumn("", Gtk.CellRendererPixbuf(icon_name='media-playback-start'), visible=7)
         col.set_expand(False)
         self.playlist.append_column(col)
-        col = Gtk.TreeViewColumn("Title", Gtk.CellRendererText(ellipsize=True), text=0)
+
+        col = Gtk.TreeViewColumn("Artist", Gtk.CellRendererText(ellipsize=True, family='Roboto, DejaVu Sans', weight=500), text=1)
+        # col.set_expand(True)
+        col.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
+        col.set_fixed_width(250)
+        self.playlist.append_column(col)
+
+        col = Gtk.TreeViewColumn("Title", Gtk.CellRendererText(ellipsize=True, family='Roboto, DejaVu Sans'), text=0)
         col.set_expand(True)
         self.playlist.append_column(col)
-        col = Gtk.TreeViewColumn("Artist", Gtk.CellRendererText(ellipsize=True), text=1)
-        col.set_expand(True)
-        self.playlist.append_column(col)
+
         col = Gtk.TreeViewColumn("Duration", Gtk.CellRendererText(), text=2)
         col.set_expand(False)
         self.playlist.append_column(col)
 
         self.vbox.show_all()
+        self.window.add_accel_group(self.accels)
         self.window.maximize()
-        self.window.hide()
+        self.window.show_all()
 
         seek_height = max(self.seek_bar.get_allocation().height, self.precache_progress.get_allocation().height)
         self.seek_bar.set_size_request(-1, seek_height)
@@ -177,8 +244,8 @@ class App(object):
         self._on_download_finished()
 
         Keybinder.init()
-        Keybinder.bind('<Super>Return', self._on_random_clicked)
-        Keybinder.bind('<Super>S', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
+        Keybinder.bind('<Ctrl><Alt>Return', self._on_random_clicked)
+        Keybinder.bind('<Ctrl><Alt>Backspace', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
 
         self.status_icon = Gtk.StatusIcon()
         self.status_icon.set_from_file(os.path.join(DIR, 'icons/play.png'))
@@ -203,7 +270,7 @@ class App(object):
         quit.set_label("Quit")
 
         show.connect("activate", self._show_or_hide)
-        quit.connect("activate", lambda *args: Gtk.main_quit())
+        quit.connect("activate", self.quit)
 
         menu.append(show)
         menu.append(quit)
@@ -223,14 +290,14 @@ class App(object):
         get_token(self.window, self._on_token_ready, True)
 
     def _on_token_ready(self, access_token):
-        def cb(data):
-            if 'error' in data.keys():
+        def cb(success):
+            if not success:
                 return self._start_login_force()
             else:
                 self._on_refresh_clicked()
 
         self.vk = VKApi(access_token)
-        self.vk.users_get(lambda data: Gdk.threads_add_idle(0, lambda: cb(data)))
+        self.vk.load_my_info(lambda success: Gdk.threads_add_idle(0, lambda: cb(success)))
 
     def _refresh(self):
         def cb(data):
@@ -255,10 +322,16 @@ class App(object):
         Thread(target=self._refresh).start()
 
     def _on_play_clicked(self, *args):
+        if self.is_downloading:
+            return
         self.player.play()
+        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
 
     def _on_pause_clicked(self, *args):
+        if self.is_downloading:
+            return
         self.player.pause()
+        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
 
     def _on_random_clicked(self, *args):
         model = self.playlist.get_model()
@@ -281,15 +354,20 @@ class App(object):
         self.playlist.get_selection().select_iter(iter_)
         self.current_song_iter = iter_
         title, artist, duration_text, url, duration, owner_id, aid, is_playing = [self.playlist.get_model().get_value(iter_, x) for x in xrange(0, 8)]
-        title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8'))
-        notify('media-playback-start', 'Now playing', u'<b>{}</b> - {}'.format(artist.decode('utf-8'), title.decode('utf-8')), timeout=5000)
-        self.track_title.set_text(title_string)
+        title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip()
+        self.current_title_string = title_string
+        title_string_html = u'<b>{}</b> - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip()
+        notify('media-playback-start', 'Now playing', u'<b>{}</b> - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip(), timeout=5000)
+        # self.track_title.set_text(title_string)
+        self.track_title.set_markup(u'<span font="Roboto 24" weight="300">{}</span>'.format(title_string_html))
         self.window.set_title(title_string)
-        self.track_time.set_text(duration_text)
+        self.track_time.set_text('<span font="Roboto 24" weight="100">{}</span>'.format(duration_text))
         self.song_length = duration
         self.player.play(u'{}_{}'.format(owner_id, aid), url)
         self.seek_bar.set_adjustment(Gtk.Adjustment(0, 0, duration, 0.1, 5, 0))
         self.seek_bar.set_value(0)
+
+        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
 
         title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
         # print 'Fetching album art for', title_string_cleaned
@@ -307,11 +385,13 @@ class App(object):
 
                 self._play_song_at_iter(next_iter)
 
-            self.track_time.set_text('%02d:%02d / %02d:%02d' % (
-                int(progress) / 60,
-                int(progress) % 60,
-                self.song_length / 60,
-                self.song_length % 60
+            self.track_time.set_markup('<span font="Roboto 24" weight="100">{}</span>'.format(
+                '%02d:%02d / %02d:%02d' % (
+                    int(progress) / 60,
+                    int(progress) % 60,
+                    self.song_length / 60,
+                    self.song_length % 60
+                )
             ))
         if self.last_volume != self.volume_scale.get_value():
             self.last_volume = self.volume_scale.get_value()
@@ -328,11 +408,17 @@ class App(object):
             file = Gio.File.new_for_uri(artworkUrl)
             pixbuf = GdkPixbuf.Pixbuf.new_from_stream_at_scale(
                 file.read(cancellable=None),
-                width=42, height=42,
+                width=144, height=144,
                 preserve_aspect_ratio=False,
                 cancellable=None
             )
-            Gdk.threads_add_idle(0, lambda: self.cover.set_from_pixbuf(pixbuf))
+        else:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                os.path.join(DIR, 'icons/cover512.jpg'),
+                width=144, height=144,
+                preserve_aspect_ratio=False
+            )
+        Gdk.threads_add_idle(0, lambda: self.cover.set_from_pixbuf(pixbuf))
 
     def _on_seek_start(self, *args):
         self.is_seeking = True
@@ -344,6 +430,7 @@ class App(object):
         self.is_seeking = False
 
     def _on_download_started(self):
+        self.is_downloading = True
         self.seek_bar.set_visible(False)
         self.precache_progress.set_visible(True)
 
@@ -351,8 +438,10 @@ class App(object):
         self.precache_progress.set_fraction(float(read) / length)
 
     def _on_download_finished(self):
+        self.is_downloading = False
         self.seek_bar.set_visible(True)
         self.precache_progress.set_visible(False)
+        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
 
     def set_busy(self, is_busy):
         self.spinner.set_visible(is_busy)
@@ -372,5 +461,10 @@ class App(object):
             if 'error' in data:
                 return self._start_login_force()
             Gdk.threads_add_idle(0, lambda: self._populate_playlist(data['response'][1:]))
+            Gdk.threads_add_idle(0, lambda: self.playlist.grab_focus())
 
         self.vk.audio_search(cb, q=self.query.get_text())
+
+    def quit(self, *args):
+        self.ipc.stop()
+        Gtk.main_quit()

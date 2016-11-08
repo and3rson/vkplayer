@@ -4,6 +4,22 @@ from threading import Thread
 import urllib2
 from settings import Settings
 
+# from pyglet.media.drivers import pulse
+from pyglet.media.drivers.pulse import PulseAudioDriver
+
+PulseAudioDriver.get_app_name = lambda self: 'VKPlayer'
+
+
+# class PAProxy(object):
+#     def __getattr__(self, name):
+#         return getattr(pulse.pa, name)
+
+
+# pulse.pa = PAProxy()
+
+# pa.pa_stream_new = lambda *args: pa.pa_signal_new(args[0], 'Playback', args[2], args[3])
+# print pa.pa_context_get_name()
+
 
 class Downloader(Thread):
     def __init__(self, audio_id, url, progress_callback, result_callback):
