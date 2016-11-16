@@ -38,18 +38,19 @@ class App(object):
         self.last_volume = self.settings.cp.getfloat('general', 'volume')
         self.settings.release()
 
-        self.is_downloading = False
-        self.player.on_download_started = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_started(*args))
-        self.player.on_progress_update = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
-        self.player.on_download_finished = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
+        self.player.on_download_started_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_started(*args))
+        self.player.on_progress_update_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
+        self.player.on_download_finished_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
 
     def start(self):
         self.ipc.start()
-        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
+        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
         self.window = Gtk.Window()
         self.window.resize(600, 400)
         self.window.set_title('VK audio player')
+
+        self.window.set_icon_from_file(os.path.join(DIR, 'icons/icon128.png'))
 
         self.accels = Gtk.AccelGroup()
 
@@ -294,6 +295,7 @@ class App(object):
             if not success:
                 return self._start_login_force()
             else:
+                self.refresh.set_label(u' '.join(self.vk.data[key] for key in ('first_name', 'last_name')))
                 self._on_refresh_clicked()
 
         self.vk = VKApi(access_token)
@@ -301,6 +303,7 @@ class App(object):
 
     def _refresh(self):
         def cb(data):
+            self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
             if 'error' in data.keys():
                 return self._start_login_force()
             Gdk.threads_add_idle(0, lambda: self._populate_playlist(data['response']))
@@ -318,20 +321,21 @@ class App(object):
             self.playlist_store.append((song['title'], song['artist'], song_duration, song['url'], song['duration'], song['owner_id'], song['aid'], False))
 
     def _on_refresh_clicked(self, *args):
+        self.ipc.broadcast('state_changed', [True, False, 'Refreshing...'])
         self.set_busy(True)
         Thread(target=self._refresh).start()
 
     def _on_play_clicked(self, *args):
-        if self.is_downloading:
+        if self.player.is_downloading:
             return
         self.player.play()
-        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
+        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
     def _on_pause_clicked(self, *args):
-        if self.is_downloading:
+        if self.player.is_downloading:
             return
         self.player.pause()
-        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
+        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
     def _on_random_clicked(self, *args):
         model = self.playlist.get_model()
@@ -367,7 +371,7 @@ class App(object):
         self.seek_bar.set_adjustment(Gtk.Adjustment(0, 0, duration, 0.1, 5, 0))
         self.seek_bar.set_value(0)
 
-        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
+        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
         title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
         # print 'Fetching album art for', title_string_cleaned
@@ -430,7 +434,6 @@ class App(object):
         self.is_seeking = False
 
     def _on_download_started(self):
-        self.is_downloading = True
         self.seek_bar.set_visible(False)
         self.precache_progress.set_visible(True)
 
@@ -438,10 +441,10 @@ class App(object):
         self.precache_progress.set_fraction(float(read) / length)
 
     def _on_download_finished(self):
-        self.is_downloading = False
+        self.player.is_downloading = False
         self.seek_bar.set_visible(True)
         self.precache_progress.set_visible(False)
-        self.ipc.broadcast('state_changed', [self.player.is_playing, self.current_title_string])
+        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
     def set_busy(self, is_busy):
         self.spinner.set_visible(is_busy)
@@ -453,17 +456,42 @@ class App(object):
             self.spinner.stop()
 
     def _on_search_clicked(self, *args):
+        self.ipc.broadcast('state_changed', [True, False, 'Searching...'])
         self.set_busy(True)
         Thread(target=self._search).start()
 
     def _search(self):
         def cb(data):
+            self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
             if 'error' in data:
                 return self._start_login_force()
             Gdk.threads_add_idle(0, lambda: self._populate_playlist(data['response'][1:]))
             Gdk.threads_add_idle(0, lambda: self.playlist.grab_focus())
 
         self.vk.audio_search(cb, q=self.query.get_text())
+
+    def play_next(self):
+        model = self.playlist.get_model()
+        next_iter = model.iter_next(self.current_song_iter)
+
+        self._play_song_at_iter(next_iter)
+
+    def play_prev(self):
+        model = self.playlist.get_model()
+
+        prev_iter = None
+        iter = model.get_iter_first()
+
+        current_path = model.get_path(self.current_song_iter)
+
+        while True:
+            prev_iter = iter
+            iter = model.iter_next(iter)
+            if not iter:
+                return
+            if model.get_path(iter) == current_path:
+                self._play_song_at_iter(prev_iter)
+                return
 
     def quit(self, *args):
         self.ipc.stop()

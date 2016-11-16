@@ -64,6 +64,7 @@ class Player(Thread):
     def __init__(self):
         super(Player, self).__init__()
 
+        self.is_downloading = False
         self.queue_thread = None
         self._finished = False
         self.player = None
@@ -96,12 +97,13 @@ class Player(Thread):
 
     def play(self, audio_id=None, url=None):
         if url:
-            self.on_download_started()
+            self.on_download_started_cb()
             if self.queue_thread:
                 self.queue_thread.stop()
             self._reset()
             if not os.path.exists(os.path.join(Settings.get_cache_dir(), '{}.mp3'.format(audio_id))):
-                self.queue_thread = Downloader(audio_id, url, self.on_progress_update, self._on_downloaded)
+                self.is_downloading = True
+                self.queue_thread = Downloader(audio_id, url, self.on_progress_update_cb, self._on_downloaded)
                 self.queue_thread.start()
             else:
                 self._on_downloaded(audio_id, None, False)
@@ -123,7 +125,8 @@ class Player(Thread):
         self.player.play()
         self.player.volume = self.volume
 
-        self.on_download_finished()
+        self.is_downloading = False
+        self.on_download_finished_cb()
 
     def stop(self):
         pyglet.app.exit()
@@ -134,17 +137,17 @@ class Player(Thread):
     def get_play_progress(self):
         return self.player.time
 
+    def on_download_started_cb(self):
+        raise NotImplementedError()
+
+    def on_progress_update_cb(self, read, length):
+        raise NotImplementedError()
+
+    def on_download_finished_cb(self):
+        raise NotImplementedError()
+
     def seek(self, pos):
         self.player.seek(pos)
-
-    def on_download_started(self):
-        pass
-
-    def on_progress_update(self, read, length):
-        pass
-
-    def on_download_finished(self):
-        pass
 
     @property
     def is_playing(self):
