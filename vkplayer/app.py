@@ -11,6 +11,10 @@ from threading import Thread
 from random import randint
 from notifications import notify
 from re import sub
+try:
+    from setproctitle import setproctitle
+except ImportError:
+    setproctitle = None
 import os
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,6 +47,9 @@ class App(object):
         self.player.on_download_finished_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
 
     def start(self):
+        if setproctitle:
+            setproctitle('vkplayer')
+
         self.ipc.start()
         self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
