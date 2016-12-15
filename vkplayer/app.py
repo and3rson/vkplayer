@@ -254,6 +254,9 @@ class App(object):
         Keybinder.init()
         Keybinder.bind('<Ctrl><Alt>Return', self._on_random_clicked)
         Keybinder.bind('<Ctrl><Alt>Backspace', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
+        Keybinder.bind('XF86AudioPlay', self._on_play_clicked)
+        Keybinder.bind('XF86AudioPause', self._on_pause_clicked)
+        Keybinder.bind('XF86AudioNext', self._on_random_clicked)
 
         self.status_icon = Gtk.StatusIcon()
         self.status_icon.set_from_file(os.path.join(DIR, 'icons/play.png'))
@@ -385,31 +388,35 @@ class App(object):
         Thread(target=lambda: self.itunes.search(self._on_song_info_loaded, term=title_string_cleaned)).start()
 
     def _update(self):
-        if self.current_song_iter is not None:
-            progress = self.player.get_play_progress()
-            if not self.is_seeking:
-                self.seek_bar.set_value(progress)
+        try:
+            if self.current_song_iter is not None:
+                progress = self.player.get_play_progress()
+                if not self.is_seeking:
+                    self.seek_bar.set_value(progress)
 
-            if self.player.is_finished:
-                model = self.playlist.get_model()
-                next_iter = model.iter_next(self.current_song_iter)
+                if self.player.is_finished:
+                    model = self.playlist.get_model()
+                    next_iter = model.iter_next(self.current_song_iter)
 
-                self._play_song_at_iter(next_iter)
+                    self._play_song_at_iter(next_iter)
 
-            self.track_time.set_markup('<span font="Roboto 24" weight="100">{}</span>'.format(
-                '%02d:%02d / %02d:%02d' % (
-                    int(progress) / 60,
-                    int(progress) % 60,
-                    self.song_length / 60,
-                    self.song_length % 60
-                )
-            ))
-        if self.last_volume != self.volume_scale.get_value():
-            self.last_volume = self.volume_scale.get_value()
-            self.settings.acquire()
-            self.settings.cp.set('general', 'volume', self.last_volume)
-            self.settings.release()
-        Gdk.threads_add_timeout(0, 100, self._update)
+                self.track_time.set_markup('<span font="Roboto 24" weight="100">{}</span>'.format(
+                    '%02d:%02d / %02d:%02d' % (
+                        int(progress) / 60,
+                        int(progress) % 60,
+                        self.song_length / 60,
+                        self.song_length % 60
+                    )
+                ))
+            if self.last_volume != self.volume_scale.get_value():
+                self.last_volume = self.volume_scale.get_value()
+                self.settings.acquire()
+                self.settings.cp.set('general', 'volume', self.last_volume)
+                self.settings.release()
+        except:
+            raise
+        finally:
+            Gdk.threads_add_timeout(0, 100, self._update)
 
     def _on_song_info_loaded(self, data):
         if data['resultCount'] > 0:
