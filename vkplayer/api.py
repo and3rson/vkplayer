@@ -2,6 +2,7 @@ from urllib import urlencode
 import urllib2
 import json
 from threading import Thread
+from log import logger
 
 
 class BaseApi(object):
@@ -9,11 +10,14 @@ class BaseApi(object):
         kwargs = {
             k: v.encode('utf-8') if isinstance(v, unicode) else v for k, v in kwargs.items()
         }
-        response = urllib2.urlopen(self.BASE_URL.format(
+        url = self.BASE_URL.format(
             method=method,
             query=urlencode(kwargs)
-        ))
-        cb(json.loads(response.read()))
+        )
+        logger.info('GET {}'.format(url))
+        response = urllib2.urlopen(url)
+        result = json.loads(response.read())
+        cb(result)
 
 
 class VKApi(BaseApi):

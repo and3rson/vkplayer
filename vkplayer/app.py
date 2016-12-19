@@ -328,7 +328,8 @@ class App(object):
                 song['duration'] / 60,
                 song['duration'] % 60
             )
-            self.playlist_store.append((song['title'], song['artist'], song_duration, song['url'], song['duration'], song['owner_id'], song['aid'], False))
+            if song.get('url'):
+                self.playlist_store.append((song['title'], song['artist'], song_duration, song['url'], song['duration'], song['owner_id'], song['aid'], False))
 
     def _on_refresh_clicked(self, *args):
         self.ipc.broadcast('state_changed', [True, False, 'Refreshing...'])
