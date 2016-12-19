@@ -16,7 +16,7 @@ def _start_login_process(window, callback):
     win.set_transient_for(window)
     win.show_all()
 
-    wk.open('https://oauth.vk.com/authorize?client_id=5604598&response_type=token&scope=friends,audio,offline,a&display=mobile')
+    wk.open('https://oauth.vk.com/authorize?client_id=3682744&response_type=token&scope=friends,audio,offline,a&display=mobile')
 
     def login_succeeded(webview, frame):
         if frame.get_uri().startswith('https://oauth.vk.com/blank.html'):
