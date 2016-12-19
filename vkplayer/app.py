@@ -45,6 +45,7 @@ class App(object):
         self.player.on_download_started_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_started(*args))
         self.player.on_progress_update_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
         self.player.on_download_finished_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
+        self.player.on_media_state_changed = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_media_state_changed(*args))
 
     def start(self):
         if setproctitle:
@@ -149,7 +150,8 @@ class App(object):
         self.seek_bar = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, adjustment=Gtk.Adjustment(0, 0, 1, 1, 0, 0))
 
         self.seek_bar.set_draw_value(False)
-        self.seek_bar.set_sensitive(False)
+        self.seek_bar.set_sensitive(True)
+        # self.seek_bar.connect('value_changed', lambda *args: self.player.seek(self.seek_bar.get_value()))
         self.seek_panel.pack_start(self.seek_bar, True, True, 0)
 
         self.seek_bar.connect('button-press-event', self._on_seek_start)
@@ -340,13 +342,13 @@ class App(object):
         if self.player.is_downloading:
             return
         self.player.play()
-        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
+        # self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
     def _on_pause_clicked(self, *args):
         if self.player.is_downloading:
             return
         self.player.pause()
-        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
+        # self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
     def _on_random_clicked(self, *args):
         model = self.playlist.get_model()
@@ -379,7 +381,7 @@ class App(object):
         self.track_time.set_text('<span font="Roboto 24" weight="100">{}</span>'.format(duration_text))
         self.song_length = duration
         self.player.play(u'{}_{}'.format(owner_id, aid), url)
-        self.seek_bar.set_adjustment(Gtk.Adjustment(0, 0, duration, 0.1, 5, 0))
+        # self.seek_bar.set_adjustment(Gtk.Adjustment(0, 0, duration, 0.1, 5, 0))
         self.seek_bar.set_value(0)
 
         self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
@@ -396,15 +398,18 @@ class App(object):
                     self.seek_bar.set_value(progress)
 
                 if self.player.is_finished:
+                    print 'FINISHED'
                     model = self.playlist.get_model()
                     next_iter = model.iter_next(self.current_song_iter)
 
                     self._play_song_at_iter(next_iter)
 
+                progress_seconds = self.player.get_play_progress_seconds()
+
                 self.track_time.set_markup('<span font="Roboto 24" weight="100">{}</span>'.format(
                     '%02d:%02d / %02d:%02d' % (
-                        int(progress) / 60,
-                        int(progress) % 60,
+                        int(progress_seconds) / 60,
+                        int(progress_seconds) % 60,
                         self.song_length / 60,
                         self.song_length % 60
                     )
@@ -443,10 +448,13 @@ class App(object):
         self.is_seeking = True
 
     def _on_seek_end(self, *args):
-        self.player.pause()
+        # self.player.pause()
         self.player.seek(self.seek_bar.get_value())
-        self.player.play()
+        # self.player.play()
         self.is_seeking = False
+
+    # def seek(self, pos):
+    #     self.player.set_position(pos)
 
     def _on_download_started(self):
         self.seek_bar.set_visible(False)
@@ -459,6 +467,9 @@ class App(object):
         self.player.is_downloading = False
         self.seek_bar.set_visible(True)
         self.precache_progress.set_visible(False)
+        self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
+
+    def _on_media_state_changed(self):
         self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
     def set_busy(self, is_busy):

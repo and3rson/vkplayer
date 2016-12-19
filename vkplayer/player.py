@@ -1,24 +1,8 @@
 import os
-import pyglet
+import vlc
 from threading import Thread
 import urllib2
 from settings import Settings
-
-# from pyglet.media.drivers import pulse
-from pyglet.media.drivers.pulse import PulseAudioDriver
-
-PulseAudioDriver.get_app_name = lambda self: 'VKPlayer'
-
-
-# class PAProxy(object):
-#     def __getattr__(self, name):
-#         return getattr(pulse.pa, name)
-
-
-# pulse.pa = PAProxy()
-
-# pa.pa_stream_new = lambda *args: pa.pa_signal_new(args[0], 'Playback', args[2], args[3])
-# print pa.pa_context_get_name()
 
 
 class Downloader(Thread):
@@ -77,14 +61,27 @@ class Player(Thread):
             self.player.delete()
             del self.player
         self._finished = False
-        self.player = pyglet.media.Player()
-        self.player.on_eos = self._on_eos
+        self.player = vlc.MediaPlayer()
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerPlaying, self._on_media_state_changed)
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerPaused, self._on_media_state_changed)
+        # self.player.on_eos = self._on_eos
+
+    # def attach_on_eos(self):
+    #     self.player.event_manager().event_attach(vlc.EventType.MediaListEndReached, self._on_eos)
+
+    # def detach_on_eos(self):
+    #     self.player.event_manager().event_detach(vlc.EventType.MediaListEndReached)
 
     def run(self):
-        pyglet.app.run()
+        pass
+        # pyglet.app.run()
 
     def _on_eos(self, *args):
+        # self.detach_on_eos()
         self._finished = True
+
+    def _on_media_state_changed(self, e):
+        self.on_media_state_changed()
 
     def set_volume(self, value):
         if self.player:
@@ -93,25 +90,30 @@ class Player(Thread):
 
     @property
     def is_finished(self):
-        return self._finished
+        return self.player.get_position() >= 1
 
     def play(self, audio_id=None, url=None):
+        print 'Playing', url
         if url:
-            self.on_download_started_cb()
-            if self.queue_thread:
-                self.queue_thread.stop()
-            self._reset()
-            if not os.path.exists(os.path.join(Settings.get_cache_dir(), '{}.mp3'.format(audio_id))):
-                self.is_downloading = True
-                self.queue_thread = Downloader(audio_id, url, self.on_progress_update_cb, self._on_downloaded)
-                self.queue_thread.start()
-            else:
-                self._on_downloaded(audio_id, None, False)
+            self.player.set_media(vlc.Media(url))
+            self.player.play()
+            # self.attach_on_eos()
+            # self.on_download_started_cb()
+            # if self.queue_thread:
+            #     self.queue_thread.stop()
+            # self._reset()
+            # if not os.path.exists(os.path.join(Settings.get_cache_dir(), '{}.mp3'.format(audio_id))):
+            #     self.is_downloading = True
+            #     self.queue_thread = Downloader(audio_id, url, self.on_progress_update_cb, self._on_downloaded)
+            #     self.queue_thread.start()
+            # else:
+            #     self._on_downloaded(audio_id, None, False)
         else:
             self.player.play()
             self.player.volume = self.volume
 
     def _on_downloaded(self, audio_id, data, save=True):
+        raise AssertionError()
         fname = os.path.join(Settings.get_cache_dir(), '{}.mp3'.format(audio_id))
 
         if save:
@@ -119,7 +121,8 @@ class Player(Thread):
             file.write(data)
             file.close()
 
-        source = pyglet.media.load(fname)
+        # source = pyglet.media.load(fname)
+        source = vlc.Media(fname)
 
         self.player.queue(source)
         self.player.play()
@@ -129,13 +132,18 @@ class Player(Thread):
         self.on_download_finished_cb()
 
     def stop(self):
-        pyglet.app.exit()
+        pass
+        # raise AssertionError()
+        # pyglet.app.exit()
 
     def pause(self):
         self.player.pause()
 
     def get_play_progress(self):
-        return self.player.time
+        return self.player.get_position()
+
+    def get_play_progress_seconds(self):
+        return int(self.player.get_position() * self.player.get_length() / 1000)
 
     def on_download_started_cb(self):
         raise NotImplementedError()
@@ -146,9 +154,12 @@ class Player(Thread):
     def on_download_finished_cb(self):
         raise NotImplementedError()
 
+    def on_media_state_changed(self):
+        raise NotImplementedError()
+
     def seek(self, pos):
-        self.player.seek(pos)
+        self.player.set_position(pos)
 
     @property
     def is_playing(self):
-        return self.player.playing
+        return self.player.get_state() == vlc.State.Playing
