@@ -90,7 +90,7 @@ class Player(Thread):
 
     @property
     def is_finished(self):
-        return self.player.get_position() >= 1
+        return self.player.get_position() >= 0.999
 
     def play(self, audio_id=None, url=None):
         print 'Playing', url
