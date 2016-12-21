@@ -86,7 +86,7 @@ class Player(Thread):
     def set_volume(self, value):
         if self.player:
             self.volume = value
-            self.player.volume = value
+            self.player.audio_set_volume(int(value * 100))
 
     @property
     def is_finished(self):
