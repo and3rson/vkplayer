@@ -46,6 +46,7 @@ class App(object):
         self.player.on_progress_update_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_progress_update(*args))
         self.player.on_download_finished_cb = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_download_finished(*args))
         self.player.on_media_state_changed = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_media_state_changed(*args))
+        self.player.on_media_end_reached = lambda *args: Gdk.threads_add_idle(0, lambda: self._on_media_end_reached(*args))
 
     def start(self):
         if setproctitle:
@@ -191,6 +192,9 @@ class App(object):
         key, mod = Gtk.accelerator_parse(accelerator)
         self.query.add_accelerator('grab-focus', self.accels, key, mod, Gtk.AccelFlags.VISIBLE)
         self.search_panel.pack_start(self.query, True, True, 0)
+
+        self.performer_only_cb = Gtk.CheckButton.new_with_label('By artist only')
+        self.search_panel.pack_start(self.performer_only_cb, False, True, 0)
 
         self.search = Gtk.Button('Search')
         self.search.connect('clicked', self._on_search_clicked)
@@ -386,9 +390,10 @@ class App(object):
 
         self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
-        title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
+        # title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
+        # title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
         # print 'Fetching album art for', title_string_cleaned
-        Thread(target=lambda: self.itunes.search(self._on_song_info_loaded, term=title_string_cleaned)).start()
+        Thread(target=lambda: self.itunes.search(self._on_song_info_loaded, term=artist.decode('utf-8'))).start()
 
     def _update(self):
         try:
@@ -396,13 +401,6 @@ class App(object):
                 progress = self.player.get_play_progress()
                 if not self.is_seeking:
                     self.seek_bar.set_value(progress)
-
-                if self.player.is_finished:
-                    print 'FINISHED'
-                    model = self.playlist.get_model()
-                    next_iter = model.iter_next(self.current_song_iter)
-
-                    self._play_song_at_iter(next_iter)
 
                 progress_seconds = self.player.get_play_progress_seconds()
 
@@ -472,6 +470,14 @@ class App(object):
     def _on_media_state_changed(self):
         self.ipc.broadcast('state_changed', [self.player.is_downloading, self.player.is_playing, self.current_title_string])
 
+    def _on_media_end_reached(self):
+        model = self.playlist.get_model()
+        next_iter = model.iter_next(self.current_song_iter)
+        if not next_iter:
+            next_iter = model.get_iter_first()
+
+        self._play_song_at_iter(next_iter)
+
     def set_busy(self, is_busy):
         self.spinner.set_visible(is_busy)
         self.scroll.set_visible(not is_busy)
@@ -494,7 +500,7 @@ class App(object):
             Gdk.threads_add_idle(0, lambda: self._populate_playlist(data['response'][1:]))
             Gdk.threads_add_idle(0, lambda: self.playlist.grab_focus())
 
-        self.vk.audio_search(cb, q=self.query.get_text())
+        self.vk.audio_search(cb, q=self.query.get_text(), count=300, performer_only=int(self.performer_only_cb.get_active()))
 
     def play_next(self):
         model = self.playlist.get_model()

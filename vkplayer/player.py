@@ -53,35 +53,28 @@ class Player(Thread):
         self._finished = False
         self.player = None
         self.volume = 1
-        self._reset()
+        self.init()
 
-    def _reset(self):
-        if self.player:
-            self.player.pause()
-            self.player.delete()
-            del self.player
+    def init(self):
+        # if self.player:
+        #     self.player.pause()
+        #     self.player.delete()
+        #     del self.player
         self._finished = False
         self.player = vlc.MediaPlayer()
         self.player.event_manager().event_attach(vlc.EventType.MediaPlayerPlaying, self._on_media_state_changed)
         self.player.event_manager().event_attach(vlc.EventType.MediaPlayerPaused, self._on_media_state_changed)
-        # self.player.on_eos = self._on_eos
-
-    # def attach_on_eos(self):
-    #     self.player.event_manager().event_attach(vlc.EventType.MediaListEndReached, self._on_eos)
-
-    # def detach_on_eos(self):
-    #     self.player.event_manager().event_detach(vlc.EventType.MediaListEndReached)
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self._on_media_end_reached)
 
     def run(self):
         pass
         # pyglet.app.run()
 
-    def _on_eos(self, *args):
-        # self.detach_on_eos()
-        self._finished = True
-
     def _on_media_state_changed(self, e):
         self.on_media_state_changed()
+
+    def _on_media_end_reached(self, e):
+        self.on_media_end_reached()
 
     def set_volume(self, value):
         if self.player:
@@ -90,11 +83,12 @@ class Player(Thread):
 
     @property
     def is_finished(self):
-        return self.player.get_position() >= 0.999
+        return self._finished
 
     def play(self, audio_id=None, url=None):
         print 'Playing', url
         if url:
+            self._finished = False
             self.player.set_media(vlc.Media(url))
             self.player.play()
             # self.attach_on_eos()
@@ -155,6 +149,9 @@ class Player(Thread):
         raise NotImplementedError()
 
     def on_media_state_changed(self):
+        raise NotImplementedError()
+
+    def on_media_end_reached(self):
         raise NotImplementedError()
 
     def seek(self, pos):
