@@ -1,7 +1,8 @@
+from log import logger
 try:
     from redobject import RedObject
 except ImportError:
-    print 'redis and/or redtruck not installed, pub/sub disabled.'
+    logger.warn('redis and/or redtruck not installed, pub/sub disabled.')
     RedObject = None
 from weakref import proxy
 from gi.repository import Gdk

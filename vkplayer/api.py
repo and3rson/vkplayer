@@ -36,7 +36,7 @@ class VKApi(BaseApi):
 
     def _set_my_data(self, data):
         self.data = data
-        print 'My data:', data
+        logger.info('My data: %s', data)
 
     audio_get = api_method('audio.get')
     audio_search = api_method('audio.search')

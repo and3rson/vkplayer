@@ -3,6 +3,7 @@ import vlc
 from threading import Thread
 import urllib2
 from settings import Settings
+from log import logger
 
 
 class Downloader(Thread):
@@ -86,7 +87,7 @@ class Player(Thread):
         return self._finished
 
     def play(self, audio_id=None, url=None):
-        print 'Playing', url
+        logger.info('Playing %s', url)
         if url:
             self._finished = False
             self.player.set_media(vlc.Media(url))
