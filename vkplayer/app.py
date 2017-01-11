@@ -238,6 +238,8 @@ class App(object):
         col.set_expand(False)
         self.playlist.append_column(col)
 
+        self.playlist.connect('button-press-event', self.show_context_menu)
+
         self.vbox.show_all()
         self.window.add_accel_group(self.accels)
         self.window.maximize()
@@ -259,10 +261,12 @@ class App(object):
 
         Keybinder.init()
         Keybinder.bind('<Ctrl><Alt>Return', self._on_random_clicked)
-        Keybinder.bind('<Ctrl><Alt>Backspace', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
+        Keybinder.bind('<Ctrl><Alt>space', lambda *args: (self._on_pause_clicked if self.player.is_playing else self._on_play_clicked)())
         Keybinder.bind('XF86AudioPlay', self._on_play_clicked)
         Keybinder.bind('XF86AudioPause', self._on_pause_clicked)
         Keybinder.bind('XF86AudioNext', self._on_random_clicked)
+        Keybinder.bind('<Ctrl><Alt>Down', lambda *args: self.play_next())
+        Keybinder.bind('<Ctrl><Alt>Up', lambda *args: self.play_prev())
 
         self.status_icon = Gtk.StatusIcon()
         self.status_icon.set_from_file(os.path.join(DIR, 'icons/play.png'))
@@ -378,7 +382,7 @@ class App(object):
         title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip()
         self.current_title_string = title_string
         title_string_html = u'<b>{}</b> - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip()
-        notify('media-playback-start', 'Now playing', u'<b>{}</b> - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip(), timeout=5000)
+        notify('media-playback-start', 'Now playing', u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip(), timeout=5000)
         # self.track_title.set_text(title_string)
         self.track_title.set_markup(u'<span font="Roboto 24" weight="300">{}</span>'.format(title_string_html))
         self.window.set_title(title_string)
@@ -524,6 +528,39 @@ class App(object):
             if model.get_path(iter) == current_path:
                 self._play_song_at_iter(prev_iter)
                 return
+
+    def add_audio(self, title_string, owner_id, audio_id):
+        def cb(data):
+            print data
+            notify('success', 'Added', u'Track <b>{}</b> added to your audios.'.format(title_string), timeout=5000)
+
+        self.vk.audio_add(cb, audio_id=audio_id, owner_id=owner_id)
+
+    def show_context_menu(self, tree_view, event):
+        if event.button == 3:
+            result = tree_view.get_path_at_pos(int(event.x), int(event.y))
+
+            if not result:
+                return
+
+            path, column, x, y = result
+
+            if not path:
+                return
+
+            model = self.playlist.get_model()
+            iter = model.get_iter(path)
+
+            menu = Gtk.Menu()
+            title, artist, oid, aid = [model.get_value(iter, i) for i in (0, 1, 5, 6)]
+            title_string = u'{} - {}'.format(artist.decode('utf-8'), title.decode('utf-8')).strip()
+            item = Gtk.MenuItem('Add "{}" to my audios'.format(title_string))
+            item.connect('activate', lambda item: self.add_audio(title_string, oid, aid))
+            menu.append(item)
+
+            menu.show_all()
+
+            menu.popup(None, None, None, None, event.button, Gtk.get_current_event_time())
 
     def quit(self, *args):
         self.ipc.stop()
