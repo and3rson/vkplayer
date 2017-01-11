@@ -62,3 +62,13 @@ class ITunesApi(BaseApi):
 
     def search(self, cb, term):
         return self._request('search', cb, term=term)
+
+    def load_cover(self, cb, term):
+        def cb2(data):
+            if data['resultCount'] > 0:
+                result = data['results'][0]
+                artworkUrl = result['artworkUrl100']
+                response = urllib2.urlopen(artworkUrl)
+                data = response.read()
+                cb(data)
+        data = self.search(cb2, term)

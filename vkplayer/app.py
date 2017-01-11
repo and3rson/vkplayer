@@ -1,4 +1,5 @@
 import gi
+import tempfile
 gi.require_version('Gtk', '3.0')
 gi.require_version('Keybinder', '3.0')
 from gi.repository import Gtk, Gdk, Gio, GdkPixbuf, Keybinder
@@ -397,7 +398,7 @@ class App(object):
         # title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
         # title_string_cleaned = sub('\s+', ' ', sub(r'\[[^\]]+\]', '', sub(r'\([^\)]+\)', '', title_string)))
         # print 'Fetching album art for', title_string_cleaned
-        Thread(target=lambda: self.itunes.search(self._on_song_info_loaded, term=artist.decode('utf-8'))).start()
+        Thread(target=lambda: self.itunes.load_cover(self._on_song_info_loaded, term=artist.decode('utf-8'))).start()
 
     def _update(self):
         try:
@@ -427,16 +428,14 @@ class App(object):
             Gdk.threads_add_timeout(0, 100, self._update)
 
     def _on_song_info_loaded(self, data):
-        if data['resultCount'] > 0:
-            result = data['results'][0]
-            artworkUrl = result['artworkUrl100']
-
-            file = Gio.File.new_for_uri(artworkUrl)
-            pixbuf = GdkPixbuf.Pixbuf.new_from_stream_at_scale(
-                file.read(cancellable=None),
+        if data:
+            f = open('/tmp/vkplayer-cover', 'w')
+            f.write(data)
+            f.close()
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                '/tmp/vkplayer-cover',
                 width=144, height=144,
-                preserve_aspect_ratio=False,
-                cancellable=None
+                preserve_aspect_ratio=True
             )
         else:
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
